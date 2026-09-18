@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Транслит</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            width: 150px;
+            height: 40px;
+            background: rgba(20, 25, 35, 0.95);
+            border-radius: 12px;
+            overflow: hidden;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 12px;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        /* основной виджет */
+        .widget {
+            display: flex;
+            width: 150px;
+            height: 40px;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 8px;
+            gap: 6px;
+        }
+        /* поле ввода */
+        .widget input {
+            flex: 1;
+            background: #0f1219;
+            border: none;
+            color: #fff;
+            font-size: 12px;
+            padding: 6px 8px;
+            border-radius: 20px;
+            outline: none;
+            font-family: monospace;
+        }
+        .widget input::placeholder {
+            color: #6c7a8e;
+            font-size: 10px;
+        }
+        /* кнопка копирования и шестерёнка */
+        .widget button {
+            background: #2a3a4e;
+            border: none;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            width: 26px;
+            height: 26px;
+            border-radius: 26px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.1s;
+        }
+        .widget button:active {
+            transform: scale(0.92);
+            background: #1e2f40;
+        }
+        /* настройки — всплывающее окно (изначально скрыто) */
+        .settings-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(3px);
+        }
+        .settings-panel {
+            background: #1e293b;
+            border-radius: 24px;
+            width: 300px;
+            padding: 16px;
+            color: #e2e8f0;
+            box-shadow: 0 20px 30px rgba(0,0,0,0.5);
+            border: 1px solid #334155;
+        }
+        .settings-panel h3 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .settings-panel .close-settings {
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: #94a3b8;
+            cursor: pointer;
+        }
+        .settings-row {
+            margin-bottom: 14px;
+        }
+        .settings-row label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .settings-row select, .settings-row input {
+            width: 100%;
+            padding: 8px;
+            border-radius: 16px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: white;
+            font-size: 12px;
+        }
+        .save-settings {
+            background: #3b82f6;
+            border: none;
+            width: 100%;
+            padding: 8px;
+            border-radius: 40px;
+            font-weight: bold;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+        .config-mini {
+            font-size: 10px;
+            text-align: center;
+            margin-top: 12px;
+            color: #7e8a9b;
+        }
+        .config-mini a {
+            color: #60a5fa;
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div class="widget">
+    <input type="text" id="rusInput" placeholder="рус" autocomplete="off">
+    <button id="copyBtn" title="Скопировать латиницу">📋</button>
+    <button id="openSettingsBtn" title="Настройки">⚙️</button>
+</div>
+
+<div id="settingsOverlay" class="settings-overlay">
+    <div class="settings-panel">
+        <h3>Настройки транслитерации
+            <button class="close-settings" id="closeSettingsBtn">✖</button>
+        </h3>
+        <div class="settings-row">
+            <label>Режим регистра:</label>
+            <select id="caseSelect">
+                <option value="keep">Как было (сохранить регистр)</option>
+                <option value="upper">ВСЕ ЗАГЛАВНЫЕ</option>
+                <option value="lower">все строчные</option>
+                <option value="sentence">Предложение (первая заглавная)</option>
+                <option value="title">Каждое слово с большой</option>
+            </select>
+        </div>
+        <div class="settings-row">
+            <label>Таблица замен (русская → латиница):</label>
+            <div id="mappingsContainer" style="max-height: 200px; overflow-y: auto; background:#0f172a; border-radius: 16px; padding: 6px;"></div>
+        </div>
+        <button class="save-settings" id="saveSettingsBtn">💾 Применить и закрыть</button>
+        <div class="config-mini">
+            <a id="resetDefaultBtn">↺ Сбросить таблицу по умолчанию</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ---------- БАЗОВАЯ ТАБЛИЦА ПО УМОЛЧАНИЮ ----------
+    const DEFAULT_MAP = {
+        'а':'a', 'б':'b', 'в':'v', 'г':'g', 'д':'d', 'е':'e', 'ё':'yo',
+        'ж':'zh', 'з':'z', 'и':'i', 'й':'y', 'к':'k', 'л':'l', 'м':'m',
+        'н':'n', 'о':'o', 'п':'p', 'р':'r', 'с':'s', 'т':'t', 'у':'u',
+        'ф':'f', 'х':'kh', 'ц':'ts', 'ч':'ch', 'ш':'sh', 'щ':'shch',
+        'ъ':'', 'ы':'y', 'ь':'', 'э':'e', 'ю':'yu', 'я':'ya'
+    };
+
+    let currentMapping = new Map(Object.entries(DEFAULT_MAP));
+    let currentCaseMode = 'keep';
+
+    // ---------- ОСНОВНАЯ ФУНКЦИЯ ТРАНСЛИТЕРАЦИИ ----------
+    function transliterate(text, mapping, caseMode) {
+        if (!text) return '';
+        let result = '';
+        for (let ch of text) {
+            const lowerCh = ch.toLowerCase();
+            if (mapping.has(lowerCh)) {
+                let lat = mapping.get(lowerCh);
+                if (lat === '') continue;
+                const isUpper = (ch !== lowerCh);
+                if (isUpper) {
+                    result += (lat.length === 1) ? lat.toUpperCase() : lat[0].toUpperCase() + lat.slice(1).toLowerCase();
+                } else {
+                    result += lat.toLowerCase();
+                }
+            } else {
+                result += ch;
+            }
+        }
+        // обработка регистра
+        switch (caseMode) {
+            case 'upper': return result.toUpperCase();
+            case 'lower': return result.toLowerCase();
+            case 'sentence': return result.charAt(0).toUpperCase() + result.slice(1).toLowerCase();
+            case 'title': return result.replace(/\b\w+/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+            default: return result;
+        }
+    }
+
+    // Отрисовка таблицы соответствий в настройках
+    function renderMappingsEditor() {
+        const container = document.getElementById('mappingsContainer');
+        if (!container) return;
+        container.innerHTML = '';
+        const sorted = Array.from(currentMapping.keys()).sort((a,b) => a.localeCompare(b));
+        for (let ru of sorted) {
+            const val = currentMapping.get(ru) || '';
+            const div = document.createElement('div');
+            div.style.display = 'flex';
+            div.style.gap = '8px';
+            div.style.marginBottom = '6px';
+            div.style.alignItems = 'center';
+            div.innerHTML = `
+                <span style="width: 30px; font-weight: bold;">${ru}</span>
+                <input type="text" value="${val.replace(/"/g, '&quot;')}" data-ru="${ru}" style="flex:1; background:#0a0f18; border:1px solid #334155; border-radius: 20px; padding: 6px 8px; color:white; font-size:12px;">
+            `;
+            container.appendChild(div);
+        }
+    }
+
+    // Синхронизация таблицы из UI
+    function syncMappingFromUI() {
+        const inputs = document.querySelectorAll('#mappingsContainer input');
+        inputs.forEach(inp => {
+            const ru = inp.getAttribute('data-ru');
+            if (ru && currentMapping.has(ru)) {
+                currentMapping.set(ru, inp.value.trim());
+            }
+        });
+    }
+
+    // Загрузить настройки
+    function loadSettings() {
+        const savedMapping = localStorage.getItem('translitMapping');
+        if (savedMapping) {
+            try {
+                const parsed = JSON.parse(savedMapping);
+                currentMapping.clear();
+                for (let [k,v] of Object.entries(parsed)) currentMapping.set(k, v);
+            } catch(e) {}
+        }
+        const savedCase = localStorage.getItem('translitCaseMode');
+        if (savedCase) currentCaseMode = savedCase;
+        const caseSelect = document.getElementById('caseSelect');
+        if (caseSelect) caseSelect.value = currentCaseMode;
+        renderMappingsEditor();
+    }
+
+    function saveSettings() {
+        syncMappingFromUI();
+        const caseSelect = document.getElementById('caseSelect');
+        currentCaseMode = caseSelect.value;
+        localStorage.setItem('translitMapping', JSON.stringify(Object.fromEntries(currentMapping)));
+        localStorage.setItem('translitCaseMode', currentCaseMode);
+        // обновить вывод (если в поле ввода есть текст)
+        const inputField = document.getElementById('rusInput');
+        if (inputField && inputField.value) {
+            const converted = transliterate(inputField.value, currentMapping, currentCaseMode);
+            sessionStorage.setItem('lastTranslit', converted);
+        }
+    }
+
+    // Копирование результата в буфер обмена
+    async function copyToClipboard(text) {
+        if (!text) return;
+        try {
+            await navigator.clipboard.writeText(text);
+            const copyBtn = document.getElementById('copyBtn');
+            const original = copyBtn.innerText;
+            copyBtn.innerText = '✓';
+            setTimeout(() => copyBtn.innerText = original, 800);
+        } catch(err) {}
+    }
+
+    // Основная логика при вводе
+    const inputEl = document.getElementById('rusInput');
+    const copyBtn = document.getElementById('copyBtn');
+    const openSettingsBtn = document.getElementById('openSettingsBtn');
+    const settingsOverlay = document.getElementById('settingsOverlay');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const resetDefaultBtn = document.getElementById('resetDefaultBtn');
+
+    function updateTranslit() {
+        const rawText = inputEl.value;
+        const converted = transliterate(rawText, currentMapping, currentCaseMode);
+        if (converted) sessionStorage.setItem('lastTranslit', converted);
+    }
+
+    inputEl.addEventListener('input', () => {
+        updateTranslit();
+    });
+
+    copyBtn.addEventListener('click', () => {
+        const rawText = inputEl.value;
+        if (!rawText) return;
+        const converted = transliterate(rawText, currentMapping, currentCaseMode);
+        copyToClipboard(converted);
+    });
+
+    openSettingsBtn.addEventListener('click', () => {
+        renderMappingsEditor();  // свежие данные
+        const caseSelect = document.getElementById('caseSelect');
+        if (caseSelect) caseSelect.value = currentCaseMode;
+        settingsOverlay.style.display = 'flex';
+    });
+    closeSettingsBtn.addEventListener('click', () => settingsOverlay.style.display = 'none');
+    saveSettingsBtn.addEventListener('click', () => {
+        saveSettings();
+        settingsOverlay.style.display = 'none';
+        updateTranslit(); // обновить результат при сохранении
+    });
+    resetDefaultBtn.addEventListener('click', () => {
+        currentMapping = new Map(Object.entries(DEFAULT_MAP));
+        renderMappingsEditor();
+        saveSettings(); // сохранить сброшенные значения
+    });
+
+    // закрыть по клику вне окна настроек
+    settingsOverlay.addEventListener('click', (e) => {
+        if (e.target === settingsOverlay) settingsOverlay.style.display = 'none';
+    });
+
+    loadSettings();
+
+    // фикс: сохранение размера body (чтобы всегда 150x40)
+    document.body.style.width = '150px';
+    document.body.style.height = '40px';
+    document.body.style.margin = '0';
+    document.body.style.overflow = 'hidden';
+</script>
+</body>
+</html>

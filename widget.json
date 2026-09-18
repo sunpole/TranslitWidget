@@ -1,0 +1,10 @@
+{
+  "name": "Транслит",
+  "description": "Компактный транслитератор русского в латиницу, копирование в буфер",
+  "author": "user",
+  "width": 150,
+  "height": 40,
+  "resizable": false,
+  "alwaysOnTop": true,
+  "url": "widget.html"
+}
